@@ -27,7 +27,6 @@ import inspect
 from halonvsi.docker import *
 from halonvsi.halon import *
 from halonutils.halonutil import *
-import omd
 
 class myTopo(Topo):
     def build (self, hsts=0, sws=1, **_opts):
