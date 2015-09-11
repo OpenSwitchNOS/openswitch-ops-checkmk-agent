@@ -23,34 +23,22 @@ import pytest
 import subprocess
 import time
 import re
+import inspect
 from halonvsi.docker import *
 from halonvsi.halon import *
 from halonutils.halonutil import *
 from halonvsi.omd import *
 
-NUM_OF_SWITCHES = 1
-NUM_HOSTS_PER_SWITCH = 0
-
-SWITCH = "s1"
-OMD_SERVER = "s2"
-OMD_IP = "9.0.0.1"
-SWITCH_IP = "9.0.0.2"
-NETMASK = "24"
-
 class myTopo(Topo):
-    def build (self, hsts=0, sws=NUM_OF_SWITCHES, **_opts):
-
+    def build (self, hsts=0, sws=1, **_opts):
         self.hsts = hsts
         self.sws = sws
-
-        self.addSwitch(SWITCH)
-        self.addSwitch(name = OMD_SERVER, cls = OmdSwitch, **self.sopts)
-        self.addLink(SWITCH, OMD_SERVER)
+        switch = self.addSwitch("s1")
 
 class checkmkTest (HalonTest):
     def setupNet (self):
-        self.net = Mininet(topo=myTopo(hsts = NUM_HOSTS_PER_SWITCH,
-                                       sws = NUM_OF_SWITCHES + 1,
+        self.net = Mininet(topo=myTopo(hsts = 0,
+                                       sws = 1,
                                        hopts = self.getHostOpts(),
                                        sopts = self.getSwitchOpts()),
                                        switch = HalonSwitch,
@@ -58,33 +46,33 @@ class checkmkTest (HalonTest):
                                        link = HalonLink,
                                        controller = None,
                                        build = True)
+        print "%s PASSED." % inspect.stack()[0][3]
 
-    def configure_switch_ips (self):
-        info("\n########## Configuring switch IPs.. ##########\n")
-
+    def configure_switch (self):
         for switch in self.net.switches:
-            if isinstance(switch, HalonSwitch):
-                switch.cmd("systemctl enable checkmk-agent.socket")
-                switch.cmd("systemctl restart sockets.target")
-                switch.cmdCLI("configure terminal")
-                switch.cmdCLI("interface 1")
-                switch.cmdCLI("no shutdown")
-                switch.cmdCLI("ip address %s/%s" % (SWITCH_IP, NETMASK)),
-                switch.cmdCLI("exit")
-            else:
-                switch.setIP(ip=OMD_IP, intf="%s-eth1" % switch.name)
+            switch.cmd("systemctl enable checkmk-agent.socket")
+            switch.cmd("systemctl restart sockets.target")
+            switch.cmd("systemctl enable checkmk-agent.socket")
+            switch.cmd("systemctl restart sockets.target")
+            switch.cmdCLI("configure terminal")
+            switch.cmdCLI("interface 1")
+            switch.cmdCLI("no shutdown")
+            switch.cmdCLI("exit")
+        print "%s PASSED." % inspect.stack()[0][3]
 
-    def verify_checkmk_interface_info (self):
-        info("\n########## Verifying checkmk agent.. ##########\n")
-        # Wait for interface info to be reflected in ovsdb
+    def verify_checkmk_local (self):
         time.sleep(30)
         for switch in self.net.switches:
-            if isinstance(switch, HalonSwitch):
-                result = switch.cmd("/usr/bin/check_mk_agent")
-                ifInfo = re.findall('lnx_if\:sep\(58\)\>\>\>(.*)\<\<\<ovs_bonding', result, re.DOTALL)
-                if (ifInfo == None) or (ifInfo == ['\r\n']):
-                    print 'check_mk_agent failed to get interface info'
-                    assert 'check_mk_agent failed to get interface info'
+            result = switch.cmd("/usr/bin/check_mk_agent")
+            ifInfo = re.findall('lnx_if\:sep\(58\)\>\>\>(.*)\<\<\<ovs_bonding', result, re.DOTALL)
+            if (ifInfo == None) or (ifInfo == ['\r\n']):
+                print '%s FAILED.' % inspect.stack()[0][3]
+                assert 'check_mk_agent failed to get interface info'
+            else:
+                print "%s PASSED." % inspect.stack()[0][3]
+
+    def verify_checkmk_telnet (self):
+        pass
 
 class Test_checkmk_basic_setup:
     def setup (self):
@@ -109,5 +97,6 @@ class Test_checkmk_basic_setup:
         del self.test_var
 
     def test_run (self):
-        self.test_var.configure_switch_ips()
-        self.test_var.verify_checkmk_interface_info()
+        self.test_var.configure_switch()
+        self.test_var.verify_checkmk_local()
+        self.test_var.verify_checkmk_telnet()
