@@ -60,8 +60,6 @@ class checkmkTest (HalonTest):
                                        build = True)
 
     def configure (self):
-        info("\n########## Configuring IPs.. ##########\n")
-
         for switch in self.net.switches:
             if isinstance(switch, HalonSwitch):
                 switch.cmd("systemctl enable checkmk-agent.socket")
@@ -73,7 +71,6 @@ class checkmkTest (HalonTest):
                 switch.cmdCLI("exit")
 
     def checkmk_getIPs (self):
-        info("\n########## test 1 ##########\n")
         for switch in self.net.switches:
             result = switch.cmd("ifconfig eth0")
             ipAddrs = re.findall(r'[0-9]+(?:\.[0-9]+){3}', result)
@@ -85,15 +82,27 @@ class checkmkTest (HalonTest):
             elif isinstance(switch, OmdSwitch):
                 self.omdIpAddr = ipAddr
 
-        print self.switchIpAddr
-        print self.omdIpAddr
+        print "Switch Mgmt IP is %s, OMD Server IP is %s" % (self.switchIpAddr, self.omdIpAddr)
 
     def checkmk_addHost(self):
-        info("\n########## add host ##########\n")
         for switch in self.net.switches:
             if isinstance(switch, OmdSwitch):
                 args = ['curl', """-d 'request={"hostname": "%s", "folder": "os/linux"}'""" % self.switchIpAddr, """\"http://127.0.0.1/default/check_mk/webapi.py?action=add_host&_username=auto&_secret=secretpassword\""""]
-                switch.cmd(args)
+                result = switch.cmd(args)
+                print result
+
+    def checkmk_discoverHost(self):
+        for switch in self.net.switches:
+            if isinstance(switch, OmdSwitch):
+                args = ['curl', """-d 'request={"hostname": "%s"}'""" % self.switchIpAddr, """\"http://127.0.0.1/default/check_mk/webapi.py?action=discover_services&_username=auto&_secret=secretpassword&mode=refresh\""""]
+                result = switch.cmd(args)
+                print result
+
+    def checkmk_activateHost(self):
+        for switch in self.net.switches:
+            if isinstance(switch, OmdSwitch):
+                args = ['curl', """\"http://127.0.0.1/default/check_mk/webapi.py?action=activate_changes&_username=auto&_secret=secretpassword&mode=all\""""]
+                result = switch.cmd(args)
 
 class Test_checkmk_basic_setup:
     def setup (self):
@@ -121,3 +130,8 @@ class Test_checkmk_basic_setup:
         self.test_var.configure()
         self.test_var.checkmk_getIPs()
         self.test_var.checkmk_addHost()
+        CLI(self.test_var.net)
+        self.test_var.checkmk_discoverHost()
+        CLI(self.test_var.net)
+        self.test_var.checkmk_activateHost()
+        CLI(self.test_var.net)
