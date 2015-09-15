@@ -23,6 +23,7 @@ import pytest
 import subprocess
 import time
 import re
+import ast
 from halonvsi.docker import *
 from halonvsi.halon import *
 from halonutils.halonutil import *
@@ -36,6 +37,11 @@ OMD_SERVER = "s2"
 OMD_IP = "9.0.0.1"
 SWITCH_IP = "9.0.0.2"
 NETMASK = "24"
+
+INTERFACE_1 = "1"
+
+viewURI = """\"http://127.0.0.1/default/check_mk/view.py?view_name=%s&_do_confirm=yes&_transid=-1&_do_actions=yes&output_format=JSON&_username=auto&_secret=secretpassword\""""
+actionURI = """\"http://127.0.0.1/default/check_mk/webapi.py?action=%s&_username=auto&_secret=secretpassword&mode=all\""""
 
 class myTopo(Topo):
     def build (self, hsts=0, sws=NUM_OF_SWITCHES, **_opts):
@@ -65,7 +71,7 @@ class checkmkTest (HalonTest):
                 switch.cmd("systemctl enable checkmk-agent.socket")
                 switch.cmd("systemctl restart sockets.target")
                 switch.cmdCLI("configure terminal")
-                switch.cmdCLI("interface 1")
+                switch.cmdCLI("interface %s" % INTERFACE_1)
                 switch.cmdCLI("no shutdown")
                 switch.cmdCLI("ip address %s/%s" % (SWITCH_IP, NETMASK)),
                 switch.cmdCLI("exit")
@@ -87,23 +93,56 @@ class checkmkTest (HalonTest):
     def checkmk_addHost(self):
         for switch in self.net.switches:
             if isinstance(switch, OmdSwitch):
-                args = ['curl', """-d 'request={"hostname": "%s", "folder": "os/linux"}'""" % self.switchIpAddr, """\"http://127.0.0.1/default/check_mk/webapi.py?action=add_host&_username=auto&_secret=secretpassword\""""]
+                args = ['curl', """-d 'request={"hostname": "%s", "folder": "os/linux"}'""" % self.switchIpAddr, actionURI % "add_host"]
                 result = switch.cmd(args)
                 print result
 
     def checkmk_discoverHost(self):
+        print "wait for ovsdb..."
+        time.sleep(30)
         for switch in self.net.switches:
             if isinstance(switch, OmdSwitch):
-                args = ['curl', """-d 'request={"hostname": "%s"}'""" % self.switchIpAddr, """\"http://127.0.0.1/default/check_mk/webapi.py?action=discover_services&_username=auto&_secret=secretpassword&mode=refresh\""""]
+                args = ['curl', """-d 'request={"hostname": "%s"}'""" % self.switchIpAddr, actionURI % "discover_services"]
+                print "discover %s..." % self.switchIpAddr
                 result = switch.cmd(args)
                 print result
 
     def checkmk_activateHost(self):
         for switch in self.net.switches:
             if isinstance(switch, OmdSwitch):
-                args = ['curl', """\"http://127.0.0.1/default/check_mk/webapi.py?action=activate_changes&_username=auto&_secret=secretpassword&mode=all\""""]
+                print "activate %s..." % self.switchIpAddr
+                args = ['curl', actionURI % "activate_changes"]
                 result = switch.cmd(args)
+                print result
 
+    def checkmk_getHost(self):
+        for switch in self.net.switches:
+            if isinstance(switch, OmdSwitch):
+                args = ['curl', viewURI % "allhosts"]
+                resultStr = switch.cmd(args)
+                result = ast.literal_eval(resultStr)
+                print result
+                for hostInfo in result:
+                    if any(x == self.switchIpAddr for x in hostInfo):
+                        print hostInfo
+
+    def checkmk_getInterface(self, interface):
+        intf = "Interface %s" % interface
+        for switch in self.net.switches:
+            if isinstance(switch, OmdSwitch):
+                args = ['curl', viewURI % "svcbyhgroups"]
+                resultStr = switch.cmd(args)
+                result = ast.literal_eval(resultStr)
+                for svcInfo in result:
+                    if any(x == self.switchIpAddr for x in svcInfo) \
+                        and any(y == intf for y in svcInfo):
+                        break
+
+                print svcInfo
+                assert(intf in svcInfo)
+                return svcInfo[0]
+
+@pytest.mark.timeout(0)
 class Test_checkmk_basic_setup:
     def setup (self):
         pass
@@ -130,8 +169,18 @@ class Test_checkmk_basic_setup:
         self.test_var.configure()
         self.test_var.checkmk_getIPs()
         self.test_var.checkmk_addHost()
-        CLI(self.test_var.net)
         self.test_var.checkmk_discoverHost()
-        CLI(self.test_var.net)
         self.test_var.checkmk_activateHost()
+        self.test_var.checkmk_getHost()
+        '''
+        while True:
+            state = self.test_var.checkmk_getHost()
+            print state
+            if state != "PEND":
+                break
+            print "host state = %s, going to sleep...." % state
+            sleep(1)
+        '''
+        #self.test_var.checkmk_getInterface(INTERFACE_1)
+
         CLI(self.test_var.net)
