@@ -51,11 +51,15 @@ class checkmkTest (HalonTest):
         for switch in self.net.switches:
             switch.cmd("systemctl enable checkmk-agent.socket")
             switch.cmd("systemctl restart sockets.target")
-            switch.cmd("systemctl enable checkmk-agent.socket")
-            switch.cmd("systemctl restart sockets.target")
-            switch.cmdCLI("configure terminal")
-            switch.cmdCLI("interface 1")
-            switch.cmdCLI("no shutdown")
+            cmd = "configure terminal"
+            print cmd
+            switch.cmdCLI(cmd)
+            cmd = "interface 1"
+            print cmd
+            switch.cmdCLI(cmd)
+            cmd = "no shutdown"
+            print cmd
+            switch.cmdCLI(cmd)
             switch.cmdCLI("exit")
         print "%s PASSED." % inspect.stack()[0][3]
 
@@ -68,6 +72,7 @@ class checkmkTest (HalonTest):
                 print '%s FAILED.' % inspect.stack()[0][3]
                 assert 'check_mk_agent failed to get interface info'
             else:
+                print ifInfo
                 print "%s PASSED." % inspect.stack()[0][3]
 
     def verify_checkmk_telnet (self):
