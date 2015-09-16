@@ -38,10 +38,18 @@ OMD_IP = "9.0.0.1"
 SWITCH_IP = "9.0.0.2"
 NETMASK = "24"
 
-INTERFACE_1 = "1"
+INTERFACE = "1"
+MAGICNO = "1234"
 
+curlCmd = "curl -m 10"
 viewURI = """\"http://127.0.0.1/default/check_mk/view.py?view_name=%s&_do_confirm=yes&_transid=-1&_do_actions=yes&output_format=JSON&_username=auto&_secret=secretpassword\""""
-actionURI = """\"http://127.0.0.1/default/check_mk/webapi.py?action=%s&_username=auto&_secret=secretpassword&mode=all\""""
+actionURI = """\"http://127.0.0.1/default/check_mk/webapi.py?action=%s&_username=auto&_secret=secretpassword&mode=%s\""""
+svcInterfaceURI = """\"http://127.0.0.1/default/check_mk/view.py?view_name=service&service=Interface%201&host=%s\""""
+
+CHECKMK_DEBUG = True
+def checkmk_log(s):
+    if CHECKMK_DEBUG:
+        print s
 
 class myTopo(Topo):
     def build (self, hsts=0, sws=NUM_OF_SWITCHES, **_opts):
@@ -71,10 +79,74 @@ class checkmkTest (HalonTest):
                 switch.cmd("systemctl enable checkmk-agent.socket")
                 switch.cmd("systemctl restart sockets.target")
                 switch.cmdCLI("configure terminal")
-                switch.cmdCLI("interface %s" % INTERFACE_1)
+                switch.cmdCLI("interface %s" % INTERFACE)
                 switch.cmdCLI("no shutdown")
                 switch.cmdCLI("ip address %s/%s" % (SWITCH_IP, NETMASK)),
                 switch.cmdCLI("exit")
+                '''
+                result = switch.cmd("ovs-vsctl list Interface %s" % INTERFACE)
+                mac = re.findall('lnx_if\:sep\(58\)\>\>\>(.*)\<\<\<ovs_bonding', result, re.DOTALL)
+
+                switch.cmdCLI("ovs-vsctl set interface %s statistics:tx_packets=%s", (INTERFACE, MAGICNO))
+                switch.cmdCLI("ovs-vsctl set interface %s statistics:tx_bytes=%s", (INTERFACE, MAGICNO))
+                switch.cmdCLI("ovs-vsctl set interface %s statistics:rx_packets=%s", (INTERFACE, MAGICNO))
+                switch.cmdCLI("ovs-vsctl set interface %s statistics:rx_bytes=%s", (INTERFACE, MAGICNO))
+                switch.cmdCLI("ovs-vsctl set interface %s statistics:rx_errors=%s", (INTERFACE, MAGICNO))
+                switch.cmdCLI("ovs-vsctl set interface %s statistics:tx_errors=%s", (INTERFACE, MAGICNO))
+                '''
+
+    def checkmk_omdRunning(self):
+        omd = False
+        apache = False
+        for switch in self.net.switches:
+            if isinstance(switch, OmdSwitch):
+                cmd = "service apache2 status"
+                checkmk_log(cmd)
+                result = switch.cmd(cmd)
+                checkmk_log(result)
+                match = re.search(r'running', result)
+                if match is not None:
+                    apache = True
+
+                cmd = "netstat -plnt | grep ':80'"
+                checkmk_log(cmd)
+                result = switch.cmd(cmd)
+                checkmk_log(result)
+                match = re.search(r'LISTEN', result)
+                if match is None:
+                    apache = False
+
+                cmd = "omd status"
+                checkmk_log(cmd)
+                result = switch.cmd(cmd)
+                checkmk_log(result)
+                for line in result.splitlines():
+                    if "Overall state" in line:
+                        checkmk_log(line)
+                        match1 = re.search(r'running', line)
+                        match2 = re.search(r'partially', line)
+                        if match1 is not None and match2 is None:
+                            omd = True
+
+        return omd and apache
+
+    def checkmk_omdRestart (self):
+        for switch in self.net.switches:
+            if isinstance(switch, OmdSwitch):
+                cmd = "service apache2 stop"
+                checkmk_log(cmd)
+                result = switch.cmd(cmd)
+                cmd = "killall -9 apache2"
+                checkmk_log(cmd)
+                result = switch.cmd(cmd)
+                cmd = "service apache2 start"
+                checkmk_log(cmd)
+                result = switch.cmd(cmd)
+                checkmk_log(result)
+                cmd = "omd restart"
+                checkmk_log(cmd)
+                result = switch.cmd(cmd)
+                checkmk_log(result)
 
     def checkmk_getIPs (self):
         for switch in self.net.switches:
@@ -88,59 +160,113 @@ class checkmkTest (HalonTest):
             elif isinstance(switch, OmdSwitch):
                 self.omdIpAddr = ipAddr
 
-        print "Switch Mgmt IP is %s, OMD Server IP is %s" % (self.switchIpAddr, self.omdIpAddr)
+        checkmk_log("Switch Mgmt IP is %s, OMD Server IP is %s" % (self.switchIpAddr, self.omdIpAddr))
 
     def checkmk_addHost(self):
         for switch in self.net.switches:
             if isinstance(switch, OmdSwitch):
-                args = ['curl', """-d 'request={"hostname": "%s", "folder": "os/linux"}'""" % self.switchIpAddr, actionURI % "add_host"]
+                args = [curlCmd, """-d 'request={"hostname": "%s", "folder": "os/linux"}'""" % self.switchIpAddr, actionURI % ("add_host", "none")]
+                checkmk_log(args)
                 result = switch.cmd(args)
-                print result
+                checkmk_log(result)
+                match = re.search(r'Site Not Started', result)
+                if match is not None:
+                    return False
+                else:
+                    return True
 
-    def checkmk_discoverHost(self):
-        print "wait for ovsdb..."
-        time.sleep(30)
+    def checkmk_discover(self):
         for switch in self.net.switches:
             if isinstance(switch, OmdSwitch):
-                args = ['curl', """-d 'request={"hostname": "%s"}'""" % self.switchIpAddr, actionURI % "discover_services"]
-                print "discover %s..." % self.switchIpAddr
+                args = [curlCmd, """-d 'request={"hostname": "%s"}'""" % self.switchIpAddr, actionURI % ("discover_services", "new")]
+                checkmk_log(args)
                 result = switch.cmd(args)
-                print result
+                checkmk_log(result)
+                match = re.search(r'Service discovery successful', result)
+                if match is None:
+                    return False
 
-    def checkmk_activateHost(self):
+                args = [curlCmd, actionURI % ("activate_changes", "all")]
+                checkmk_log(args)
+                result = switch.cmd(args)
+                checkmk_log(result)
+                match = re.search(r'Site Not Started', result)
+                if match is not None:
+                    return False
+
+                ctr = 0
+                up = False
+                while not up and ctr < 10:
+                    hosts = self.checkmk_getHosts()
+                    checkmk_log(hosts)
+                    for host in hosts:
+                        checkmk_log(host)
+                        if host["host"] == self.switchIpAddr \
+                            and host["host_state"] == 'UP':
+                            up = True
+                            break
+                    if not up:
+                        ctr += 1
+                        sleep(1)
+
+                if up:
+                    return True
+                else:
+                    return False
+
+    def checkmk_getHosts(self):
+        hosts = []
         for switch in self.net.switches:
             if isinstance(switch, OmdSwitch):
-                print "activate %s..." % self.switchIpAddr
-                args = ['curl', actionURI % "activate_changes"]
-                result = switch.cmd(args)
-                print result
-
-    def checkmk_getHost(self):
-        for switch in self.net.switches:
-            if isinstance(switch, OmdSwitch):
-                args = ['curl', viewURI % "allhosts"]
+                args = [curlCmd, viewURI % "allhosts"]
+                checkmk_log(args)
                 resultStr = switch.cmd(args)
-                result = ast.literal_eval(resultStr)
-                print result
+                checkmk_log(resultStr)
+                match = re.search(r'Site Not Started', resultStr)
+                if match is None:
+                    result = ast.literal_eval(resultStr)
+                    for row in result[1:]:
+                        host = {}
+                        host["host"] = row[1]
+                        host["host_state"] = row[0]
+                        hosts.append(host)
+                return hosts
+                '''
                 for hostInfo in result:
                     if any(x == self.switchIpAddr for x in hostInfo):
-                        print hostInfo
+                        checkmk_log(hostInfo)
+                '''
 
-    def checkmk_getInterface(self, interface):
-        intf = "Interface %s" % interface
+    def checkmk_getSvcAll(self):
         for switch in self.net.switches:
             if isinstance(switch, OmdSwitch):
-                args = ['curl', viewURI % "svcbyhgroups"]
+                args = [curlCmd, viewURI % "svcbyhgroups"]
+                checkmk_log(args)
                 resultStr = switch.cmd(args)
                 result = ast.literal_eval(resultStr)
-                for svcInfo in result:
-                    if any(x == self.switchIpAddr for x in svcInfo) \
-                        and any(y == intf for y in svcInfo):
-                        break
+                #checkmk_log(result)
+                return result
 
-                print svcInfo
-                assert(intf in svcInfo)
-                return svcInfo[0]
+    def checkmk_verifyIfStats(self):
+        for switch in self.net.switches:
+            if isinstance(switch, OmdSwitch):
+                ok = False
+                cntr = 0
+                while not ok and cntr < 300:
+                    print "-----------------------------"
+                    print cntr
+                    svcs = self.checkmk_getSvcAll()
+                    for svc in svcs:
+                        print svc[0], svc[1], svc[2]
+                        if svc[1] == self.switchIpAddr \
+                            and svc[2] == 'Interface %s' % INTERFACE:
+                            print svc
+                            if svc[0] == 'OK':
+                                ok = True
+                            break
+                    sleep(1)
+                    cntr += 1
+
 
 @pytest.mark.timeout(0)
 class Test_checkmk_basic_setup:
@@ -168,19 +294,19 @@ class Test_checkmk_basic_setup:
     def test_run (self):
         self.test_var.configure()
         self.test_var.checkmk_getIPs()
-        self.test_var.checkmk_addHost()
-        self.test_var.checkmk_discoverHost()
-        self.test_var.checkmk_activateHost()
-        self.test_var.checkmk_getHost()
-        '''
+        run = 0
         while True:
-            state = self.test_var.checkmk_getHost()
-            print state
-            if state != "PEND":
-                break
-            print "host state = %s, going to sleep...." % state
-            sleep(1)
-        '''
-        #self.test_var.checkmk_getInterface(INTERFACE_1)
+            run += 1
+            sleep(20)
+            if self.test_var.checkmk_omdRunning():
+                if self.test_var.checkmk_addHost():
+                    if self.test_var.checkmk_discover():
+                        self.test_var.checkmk_verifyIfStats()
+                        break
+            if run <= 3:
+                checkmk_log("restart OMD")
+                self.test_var.checkmk_omdRestart()
+            else:
+                assert(False)
 
         CLI(self.test_var.net)
