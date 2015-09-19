@@ -49,10 +49,6 @@ class checkmkTest (HalonTest):
 
     def configure_switch (self):
         for switch in self.net.switches:
-            switch.cmd("systemctl enable checkmk-agent.socket")
-            switch.cmd("systemctl restart sockets.target")
-            switch.cmd("systemctl enable checkmk-agent.socket")
-            switch.cmd("systemctl restart sockets.target")
             switch.cmdCLI("configure terminal")
             switch.cmdCLI("interface 1")
             switch.cmdCLI("no shutdown")
