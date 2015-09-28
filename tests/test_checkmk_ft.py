@@ -24,10 +24,10 @@ import subprocess
 import time
 import re
 import ast
-from halonvsi.docker import *
-from halonvsi.halon import *
-from halonutils.halonutil import *
-from omd import *
+from opsvsi.docker import *
+from opsvsi.opsvsitest import *
+#from halonutils.halonutil import *
+#from omd import *
 
 NUM_OF_SWITCHES = 2
 NUM_HOSTS_PER_SWITCH = 0
@@ -51,6 +51,18 @@ def checkmk_log(s):
     if CHECKMK_DEBUG:
         print s
 
+OMD_DOCKER_IMAGE = 'openswitch/omd'
+
+class OmdSwitch (DockerNode, Switch):
+    def __init__(self, name, image=OMD_DOCKER_IMAGE, **kwargs):
+        kwargs['nodetype'] = "OpsVsiHost"
+        kwargs['init_cmd'] = DOCKER_DEFAULT_CMD
+        super(OmdSwitch, self).__init__(name, image, **kwargs)
+        self.inNamespace = True
+
+    def start(self, controllers):
+        pass
+
 class myTopo(Topo):
     def build (self, hsts=0, sws=NUM_OF_SWITCHES, **_opts):
 
@@ -61,21 +73,21 @@ class myTopo(Topo):
         self.addSwitch(name = OMD_SERVER, cls = OmdSwitch, **self.sopts)
         #self.addLink(SWITCH, OMD_SERVER)
 
-class checkmkTest (HalonTest):
+class checkmkTest (OpsVsiTest):
     def setupNet (self):
         self.net = Mininet(topo=myTopo(hsts = NUM_HOSTS_PER_SWITCH,
                                        sws = NUM_OF_SWITCHES,
                                        hopts = self.getHostOpts(),
                                        sopts = self.getSwitchOpts()),
-                                       switch = HalonSwitch,
-                                       host = HalonHost,
-                                       link = HalonLink,
+                                       switch = VsiOpenSwitch,
+                                       host = OpsVsiHost,
+                                       link = OpsVsiLink,
                                        controller = None,
                                        build = True)
 
     def configure (self):
         for switch in self.net.switches:
-            if isinstance(switch, HalonSwitch):
+            if isinstance(switch, VsiOpenSwitch):
                 switch.cmdCLI("configure terminal")
                 switch.cmdCLI("interface %s" % INTERFACE)
                 switch.cmdCLI("no shutdown")
@@ -153,7 +165,7 @@ class checkmkTest (HalonTest):
             for ipAddr in ipAddrs:
                 if ipAddr != '0.0.0.0' and not re.match("255", ipAddr):
                     break
-            if isinstance(switch, HalonSwitch):
+            if isinstance(switch, VsiOpenSwitch):
                 self.switchIpAddr = ipAddr
             elif isinstance(switch, OmdSwitch):
                 self.omdIpAddr = ipAddr
@@ -259,7 +271,7 @@ class checkmkTest (HalonTest):
                         if svc[1] == self.switchIpAddr \
                             and svc[2] == 'Interface %s' % INTERFACE:
                             print svc
-                            if svc[0] == 'OK':
+                            if svc[0] == 'OK' or svc[0] == 'PEND':
                                 ok = True
                             break
                     sleep(1)
@@ -306,5 +318,3 @@ class Test_checkmk_basic_setup:
                 self.test_var.checkmk_omdRestart()
             else:
                 assert(False)
-
-        CLI(self.test_var.net)

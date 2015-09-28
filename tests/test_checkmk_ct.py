@@ -24,9 +24,8 @@ import subprocess
 import time
 import re
 import inspect
-from halonvsi.docker import *
-from halonvsi.halon import *
-from halonutils.halonutil import *
+from opsvsi.docker import *
+from opsvsi.opsvsitest import *
 
 class myTopo(Topo):
     def build (self, hsts=0, sws=1, **_opts):
@@ -34,15 +33,15 @@ class myTopo(Topo):
         self.sws = sws
         switch = self.addSwitch("s1")
 
-class checkmkTest (HalonTest):
+class checkmkTest (OpsVsiTest):
     def setupNet (self):
         self.net = Mininet(topo=myTopo(hsts = 0,
                                        sws = 1,
                                        hopts = self.getHostOpts(),
                                        sopts = self.getSwitchOpts()),
-                                       switch = HalonSwitch,
-                                       host = HalonHost,
-                                       link = HalonLink,
+                                       switch = VsiOpenSwitch,
+                                       host = OpsVsiHost,
+                                       link = OpsVsiLink,
                                        controller = None,
                                        build = True)
         print "%s PASSED." % inspect.stack()[0][3]
