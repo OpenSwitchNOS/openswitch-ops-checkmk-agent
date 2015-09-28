@@ -44,7 +44,6 @@ class checkmkTest (OpsVsiTest):
                                        link = OpsVsiLink,
                                        controller = None,
                                        build = True)
-        print "%s PASSED." % inspect.stack()[0][3]
 
     def configure_switch (self):
         for switch in self.net.switches:
@@ -52,21 +51,13 @@ class checkmkTest (OpsVsiTest):
             switch.cmdCLI("interface 1")
             switch.cmdCLI("no shutdown")
             switch.cmdCLI("exit")
-        print "%s PASSED." % inspect.stack()[0][3]
 
     def verify_checkmk_local (self):
         time.sleep(30)
         for switch in self.net.switches:
             result = switch.cmd("/usr/bin/check_mk_agent")
             ifInfo = re.findall('lnx_if\:sep\(58\)\>\>\>(.*)\<\<\<ovs_bonding', result, re.DOTALL)
-            if (ifInfo == None) or (ifInfo == ['\r\n']):
-                print '%s FAILED.' % inspect.stack()[0][3]
-                assert 'check_mk_agent failed to get interface info'
-            else:
-                print "%s PASSED." % inspect.stack()[0][3]
-
-    def verify_checkmk_telnet (self):
-        pass
+            assert ifInfo != None and ifInfo != ['\r\n'], "check_mk failed"
 
 class Test_checkmk_basic_setup:
     def setup (self):
@@ -91,6 +82,7 @@ class Test_checkmk_basic_setup:
         del self.test_var
 
     def test_run (self):
+        info('\n########## Test Check_mk agent (local invocation) ##########\n')
         self.test_var.configure_switch()
         self.test_var.verify_checkmk_local()
-        self.test_var.verify_checkmk_telnet()
+        info('\n########## Test Check_mk agent passed ##########\n')
