@@ -84,7 +84,7 @@ class Test_checkmk_basic_setup:
         del self.test_var
 
     def test_run (self):
-        info('\n########## Testing as part of CRT reliability ##########\n')
+        info('\n########## Adding new Test as part of CRT reliability ##########\n')
         info('\n########## Test Check_mk agent (local invocation) ##########\n')
         self.test_var.configure_switch()
         self.test_var.verify_checkmk_local()
