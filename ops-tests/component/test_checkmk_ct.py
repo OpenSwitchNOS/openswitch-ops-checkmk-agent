@@ -33,7 +33,6 @@ sw1:1
 
 
 def test_checkmk_basic_setup(topology, step):
-    step("\n########## adding test message as part of crt--mf ##########\n")
     step("\n########## Test Check_mk agent (local invocation) ##########\n")
     sw1 = topology.get('sw1')
 
