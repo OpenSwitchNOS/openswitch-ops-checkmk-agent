@@ -34,7 +34,6 @@ sw1:1
 
 def test_checkmk_basic_setup(topology, step):
     step("\n########## Test regular file - Not a test ##########\n")
-    step("\n########## Test Check_mk agent (local invocation) ##########\n")
     sw1 = topology.get('sw1')
 
     assert sw1 is not None
