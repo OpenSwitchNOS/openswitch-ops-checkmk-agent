@@ -59,8 +59,7 @@ class checkmkTest (OpsVsiTest):
             ifInfo = re.findall('lnx_if\:sep\(58\)\>\>\>(.*)\<\<\<ovs_bonding', result, re.DOTALL)
             assert ifInfo != None and ifInfo != ['\r\n'], "check_mk failed"
 
-
-# @pytest.mark.skipif(True, reason="Disabling old tests")
+@pytest.mark.skipif(True, reason="Disabling old tests")
 class Test_checkmk_basic_setup:
     def setup (self):
         pass
@@ -84,7 +83,6 @@ class Test_checkmk_basic_setup:
         del self.test_var
 
     def test_run (self):
-        info('\n########## Testing as part of CRT reliability ##########\n')
         info('\n########## Test Check_mk agent (local invocation) ##########\n')
         self.test_var.configure_switch()
         self.test_var.verify_checkmk_local()
