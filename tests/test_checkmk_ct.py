@@ -60,7 +60,7 @@ class checkmkTest (OpsVsiTest):
             assert ifInfo != None and ifInfo != ['\r\n'], "check_mk failed"
 
 
-@pytest.mark.skipif(True, reason="Disabling old tests")
+# @pytest.mark.skipif(True, reason="Disabling old tests")
 class Test_checkmk_basic_setup:
     def setup (self):
         pass

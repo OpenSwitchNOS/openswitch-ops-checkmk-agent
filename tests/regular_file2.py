@@ -83,8 +83,7 @@ class Test_checkmk_basic_setup:
         del self.test_var
 
     def test_run (self):
-        info('\n########## Testing the module-stress-test macro ##########\n')
-        info('\n########## Test Check_mk agent (local invocation) ##########\n')
+        info('\n########## Regular file - Not a test  ##########\n')
         self.test_var.configure_switch()
         self.test_var.verify_checkmk_local()
         info('\n########## Test Check_mk agent passed ##########\n')
