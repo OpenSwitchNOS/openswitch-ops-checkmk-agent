@@ -16,6 +16,7 @@
 # under the License.
 
 import re
+from ipdb import set_trace
 
 TOPOLOGY = """
 #
@@ -37,6 +38,7 @@ def test_checkmk_basic_setup(topology, step):
     step("\n########## Test Check_mk agent (local invocation) ##########\n")
     sw1 = topology.get('sw1')
 
+    set_trace()
     assert sw1 is not None
 
     # Configure interfaces
